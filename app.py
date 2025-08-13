@@ -35,7 +35,7 @@ def main_page():
     elif current_page == 'liked_posts':
         liked_posts_page(post_manager, st.session_state.username, auth_manager)
     elif current_page == 'post_detail':
-        post_detail_page(post_manager, st.session_state.username)
+        post_detail_page(post_manager, st.session_state.username, auth_manager)
 
 def home_page():
     """홈 페이지 (피드)"""
