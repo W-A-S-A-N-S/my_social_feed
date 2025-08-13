@@ -284,7 +284,16 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
         col1, col2, col3 = st.columns([1, 5, 1])
         
         with col1:
-            st.image("https://via.placeholder.com/50", width=50)
+            # 프로필 이모지 표시 (auth_manager가 있을 때)
+            if auth_manager:
+                try:
+                    profile_emoji = auth_manager.get_user_profile_emoji(post['username'])
+                    st.markdown(f"<div style='font-size: 50px; text-align: center;'>{profile_emoji}</div>", 
+                               unsafe_allow_html=True)
+                except Exception as e:
+                    st.image("https://via.placeholder.com/50", width=50)
+            else:
+                st.image("https://via.placeholder.com/50", width=50)
         
         with col2:
             st.markdown(f"**{post['username']}** · {post['created_at']}")
