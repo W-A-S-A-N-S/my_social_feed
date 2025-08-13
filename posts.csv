@@ -1,0 +1,6 @@
+post_id,username,content,created_at,is_repost,original_post_id,like_count,repost_count
+1,dog,dog1111,2025-08-13 13:15:20,False,,2,2
+2,dog,doggy,2025-08-13 13:15:34,True,1.0,2,2
+3,dog,dog22,2025-08-13 13:15:51,True,1.0,1,0
+6,dog,doggo,2025-08-13 13:34:39,False,,2,0
+7,dog,doggo2,2025-08-13 13:34:48,False,,2,0
