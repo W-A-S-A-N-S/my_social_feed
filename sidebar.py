@@ -1,6 +1,7 @@
 import streamlit as st
 from post import display_post
 from datetime import datetime
+import os
 
 def sidebar_navigation():
     """사이드바 네비게이션 메뉴"""
@@ -172,8 +173,8 @@ def display_my_post_with_delete(post, post_manager, username):
     ">
     """, unsafe_allow_html=True)
     
-    # 게시물 헤더 (사용자 정보 + 삭제 버튼)
-    col1, col2, col3 = st.columns([1, 5, 1])
+    # 게시물 헤더 (사용자 정보 + 상세보기 + 삭제 버튼)
+    col1, col2, col3, col4 = st.columns([1, 4, 1, 1])
     
     with col1:
         st.image("https://via.placeholder.com/50", width=50)
@@ -182,6 +183,13 @@ def display_my_post_with_delete(post, post_manager, username):
         st.markdown(f"**{post['username']}** · {post['created_at']}")
     
     with col3:
+        # 상세보기 버튼
+        if st.button("📄", key=f"my_detail_{post['post_id']}", help="게시물 상세보기"):
+            st.session_state.current_page = 'post_detail'
+            st.session_state.selected_post_id = post['post_id']
+            st.rerun()
+    
+    with col4:
         # 삭제 버튼
         if st.button("🗑️", key=f"delete_btn_{post['post_id']}", help="게시물 삭제"):
             st.session_state[f"confirm_delete_{post['post_id']}"] = True
@@ -242,12 +250,29 @@ def display_my_post_with_delete(post, post_manager, username):
             """, unsafe_allow_html=True)
             st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
             st.write(original_post['content'])
+            
+            # 원본 게시물의 이미지 표시
+            if original_post.get('has_image') and original_post.get('image_path'):
+                original_image_path = original_post.get('image_path')
+                if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
+                    st.image(original_image_path, width=400)
+                else:
+                    st.write("*이미지를 불러올 수 없습니다.*")
+            
             st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.write("*삭제된 게시물입니다.*")
     else:
         # 일반 게시물
         st.write(post['content'])
+        
+        # 이미지 표시
+        if post.get('has_image') and post.get('image_path'):
+            image_path = post.get('image_path')
+            if image_path and isinstance(image_path, str) and os.path.exists(image_path):
+                st.image(image_path, width=400)
+            else:
+                st.write("*이미지를 불러올 수 없습니다.*")
     
     # 통계 정보 (액션 버튼 없이)
     st.markdown("<br>", unsafe_allow_html=True)  # 여백 추가

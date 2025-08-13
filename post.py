@@ -2,23 +2,44 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 import json
+import os
+from PIL import Image
+import io
 
 class PostManager:
-    def __init__(self, posts_file='posts.csv', likes_file='likes.csv'):
+    def __init__(self, posts_file='posts.csv', likes_file='likes.csv', images_dir='post_images'):
         self.posts_file = posts_file
         self.likes_file = likes_file
+        self.images_dir = images_dir
         self.posts_df = self.load_posts()
         self.likes_df = self.load_likes()
+        
+        # 이미지 저장 디렉토리 생성
+        if not os.path.exists(self.images_dir):
+            os.makedirs(self.images_dir)
     
     def load_posts(self):
         """게시물 데이터 로드"""
         try:
-            return pd.read_csv(self.posts_file)
+            df = pd.read_csv(self.posts_file)
+            
+            # 기존 데이터에 이미지 관련 컬럼이 없으면 추가
+            if 'has_image' not in df.columns:
+                df['has_image'] = False
+            if 'image_path' not in df.columns:
+                df['image_path'] = None
+            
+            # 데이터 타입 정리 (NaN을 None으로 변환) - 경고 해결
+            df['image_path'] = df['image_path'].where(df['image_path'].notna(), None)
+            df['has_image'] = df['has_image'].fillna(False).infer_objects(copy=False)
+                
+            return df
         except FileNotFoundError:
             return pd.DataFrame(columns=[
                 'post_id', 'username', 'content', 'created_at', 
-                'is_repost', 'original_post_id', 'like_count', 'repost_count'
-            ])
+                'is_repost', 'original_post_id', 'like_count', 'repost_count',
+                'has_image', 'image_path'
+            ], dtype=object)
     
     def load_likes(self):
         """좋아요 데이터 로드"""
@@ -49,20 +70,61 @@ class PostManager:
         else:
             return self.likes_df['like_id'].max() + 1
     
-    def create_post(self, username, content):
+    def save_image(self, uploaded_file, post_id):
+        """업로드된 이미지 저장"""
+        try:
+            # 파일 확장자 확인
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+            if file_extension not in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+                return None, "지원하지 않는 이미지 형식입니다."
+            
+            # 이미지 파일명 생성
+            image_filename = f"post_{post_id}.{file_extension}"
+            image_path = os.path.join(self.images_dir, image_filename)
+            
+            # 이미지 크기 조정 및 저장
+            image = Image.open(uploaded_file)
+            
+            # 이미지 크기 제한 (최대 800x600)
+            max_size = (800, 600)
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
+            # 이미지 저장
+            image.save(image_path, optimize=True, quality=85)
+            
+            return image_path, "이미지가 저장되었습니다."
+            
+        except Exception as e:
+            return None, f"이미지 저장 중 오류가 발생했습니다: {str(e)}"
+    
+    def create_post(self, username, content, uploaded_image=None):
         """새 게시물 작성"""
-        if not content.strip():
-            return False, "내용을 입력해주세요!"
+        if not content.strip() and not uploaded_image:
+            return False, "내용 또는 이미지를 추가해주세요!"
+        
+        post_id = self.get_next_post_id()
+        image_path = None
+        has_image = False
+        
+        # 이미지 처리
+        if uploaded_image is not None:
+            image_path, image_message = self.save_image(uploaded_image, post_id)
+            if image_path:
+                has_image = True
+            else:
+                return False, image_message
         
         new_post = {
-            'post_id': self.get_next_post_id(),
+            'post_id': post_id,
             'username': username,
             'content': content.strip(),
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'is_repost': False,
             'original_post_id': None,
             'like_count': 0,
-            'repost_count': 0
+            'repost_count': 0,
+            'has_image': has_image,
+            'image_path': image_path if has_image else None
         }
         
         self.posts_df = pd.concat([self.posts_df, pd.DataFrame([new_post])], ignore_index=True)
@@ -85,7 +147,9 @@ class PostManager:
             'is_repost': True,
             'original_post_id': original_post_id,
             'like_count': 0,
-            'repost_count': 0
+            'repost_count': 0,
+            'has_image': False,
+            'image_path': None
         }
         
         self.posts_df = pd.concat([self.posts_df, pd.DataFrame([new_repost])], ignore_index=True)
@@ -95,6 +159,39 @@ class PostManager:
         self.save_posts()
         
         return True, "리포스트되었습니다!"
+    
+    def delete_post(self, post_id, username):
+        """게시물 삭제 (본인 게시물만)"""
+        # 게시물 존재 및 소유권 확인
+        post = self.get_post_by_id(post_id)
+        if not post:
+            return False, "게시물을 찾을 수 없습니다."
+        
+        if post['username'] != username:
+            return False, "본인의 게시물만 삭제할 수 있습니다."
+        
+        # 이미지 파일 삭제
+        if post.get('has_image') and post.get('image_path'):
+            try:
+                if os.path.exists(post['image_path']):
+                    os.remove(post['image_path'])
+            except Exception as e:
+                print(f"이미지 삭제 중 오류: {e}")
+        
+        # 게시물 삭제
+        self.posts_df = self.posts_df[self.posts_df['post_id'] != post_id]
+        
+        # 해당 게시물의 좋아요 데이터도 삭제
+        self.likes_df = self.likes_df[self.likes_df['post_id'] != post_id]
+        
+        # 만약 이 게시물이 원본이고 리포스트된 게시물들이 있다면, 
+        # 리포스트 게시물들의 original_post_id를 None으로 설정 (삭제된 게시물 표시용)
+        self.posts_df.loc[self.posts_df['original_post_id'] == post_id, 'original_post_id'] = None
+        
+        self.save_posts()
+        self.save_likes()
+        
+        return True, "게시물이 삭제되었습니다."
     
     def toggle_like(self, post_id, username):
         """좋아요 토글 (좋아요 추가/제거)"""
@@ -131,31 +228,6 @@ class PostManager:
         
         return action
     
-    def delete_post(self, post_id, username):
-        """게시물 삭제 (본인 게시물만)"""
-        # 게시물 존재 및 소유권 확인
-        post = self.get_post_by_id(post_id)
-        if not post:
-            return False, "게시물을 찾을 수 없습니다."
-        
-        if post['username'] != username:
-            return False, "본인의 게시물만 삭제할 수 있습니다."
-        
-        # 게시물 삭제
-        self.posts_df = self.posts_df[self.posts_df['post_id'] != post_id]
-        
-        # 해당 게시물의 좋아요 데이터도 삭제
-        self.likes_df = self.likes_df[self.likes_df['post_id'] != post_id]
-        
-        # 만약 이 게시물이 원본이고 리포스트된 게시물들이 있다면, 
-        # 리포스트 게시물들의 original_post_id를 None으로 설정 (삭제된 게시물 표시용)
-        self.posts_df.loc[self.posts_df['original_post_id'] == post_id, 'original_post_id'] = None
-        
-        self.save_posts()
-        self.save_likes()
-        
-        return True, "게시물이 삭제되었습니다."
-    
     def get_post_by_id(self, post_id):
         """게시물 ID로 게시물 조회"""
         post = self.posts_df[self.posts_df['post_id'] == post_id]
@@ -183,8 +255,21 @@ def create_post_form(post_manager, username):
     with st.expander("새 게시물 작성", expanded=False):
         post_content = st.text_area("무슨 일이 일어나고 있나요?", height=100, key="new_post_content")
         
+        # 이미지 업로드
+        uploaded_image = st.file_uploader(
+            "이미지 업로드 (선택사항)", 
+            type=['jpg', 'jpeg', 'png', 'gif', 'webp'],
+            key="post_image_upload"
+        )
+        
+        # 업로드된 이미지 미리보기
+        if uploaded_image is not None:
+            st.write("**이미지 미리보기:**")
+            image = Image.open(uploaded_image)
+            st.image(image, width=300)
+        
         if st.button("게시하기", key="create_post_btn"):
-            success, message = post_manager.create_post(username, post_content)
+            success, message = post_manager.create_post(username, post_content, uploaded_image)
             if success:
                 st.success(message)
                 st.rerun()
@@ -193,114 +278,100 @@ def create_post_form(post_manager, username):
 
 def display_post(post, post_manager, current_username, show_actions=True):
     """개별 게시물 표시"""
-    # Streamlit 네이티브 컨테이너 사용
     with st.container():
-        # CSS 스타일 적용
-        st.markdown("""
-        <style>
-        .post-container {
-            border: 1px solid #333;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 10px 0;
-            background-color: #1e1e1e;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # 게시물 정보
+        col1, col2, col3 = st.columns([1, 5, 1])
         
-        # 컨테이너에 CSS 클래스 적용
-        with st.container():
-            st.markdown('<div class="post-container">', unsafe_allow_html=True)
+        with col1:
+            st.image("https://via.placeholder.com/50", width=50)
+        
+        with col2:
+            st.markdown(f"**{post['username']}** · {post['created_at']}")
             
-            # 사용자 정보와 게시물 링크
-            col1, col2, col3 = st.columns([1, 5, 1])
-            with col1:
-                st.image("https://via.placeholder.com/50", width=50)
-            with col2:
-                st.markdown(f"**{post['username']}** · {post['created_at']}")
-                
-                # 리포스트인 경우
-                if post['is_repost'] and post['original_post_id']:
-                    if post['content']:  # 코멘트가 있는 경우
-                        st.write(post['content'])
-                        st.markdown("---")
-                    
-                    # 원본 게시물 표시
-                    original_post = post_manager.get_post_by_id(post['original_post_id'])
-                    if original_post:
-                        st.markdown("🔄 **리포스트된 게시물:**")
-                        with st.container():
-                            st.markdown("""
-                            <div style="
-                                border: 1px solid #555;
-                                border-radius: 8px;
-                                padding: 10px;
-                                margin: 10px 0;
-                                background-color: #2a2a2a;
-                            ">
-                            """, unsafe_allow_html=True)
-                            st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
-                            st.write(original_post['content'])
-                            st.markdown("</div>", unsafe_allow_html=True)
-                    else:
-                        st.write("*삭제된 게시물입니다.*")
-                else:
-                    # 일반 게시물
+            # 리포스트인 경우
+            if post['is_repost'] and post['original_post_id']:
+                if post['content']:  # 코멘트가 있는 경우
                     st.write(post['content'])
-            
-            with col3:
-                # 개별 게시물 페이지로 이동 버튼
-                if st.button("📄", key=f"detail_{post['post_id']}", help="게시물 상세보기"):
-                    st.session_state.current_page = 'post_detail'
-                    st.session_state.selected_post_id = post['post_id']
-                    st.rerun()
+                    st.markdown("---")
                 
-                # 액션 버튼들
-                if show_actions:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    col_like, col_repost = st.columns(2)
+                # 원본 게시물 표시
+                original_post = post_manager.get_post_by_id(post['original_post_id'])
+                if original_post:
+                    st.markdown("🔄 **리포스트된 게시물:**")
+                    st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+                    st.write(original_post['content'])
                     
-                    with col_like:
-                        # 좋아요 버튼
-                        liked = post_manager.user_liked_post(post['post_id'], current_username)
-                        like_emoji = "❤️" if liked else "🤍"
-                        if st.button(f"{like_emoji} {post['like_count']}", key=f"like_{post['post_id']}"):
-                            post_manager.toggle_like(post['post_id'], current_username)
-                            st.rerun()
-                    
-                    with col_repost:
-                        # 리포스트 버튼
-                        if st.button(f"🔄 {post['repost_count']}", key=f"repost_{post['post_id']}"):
-                            st.session_state[f"show_repost_{post['post_id']}"] = True
-                            st.rerun()
-                    
-                    # 리포스트 폼
-                    if st.session_state.get(f"show_repost_{post['post_id']}", False):
-                        with st.expander("리포스트하기", expanded=True):
-                            repost_comment = st.text_area("코멘트 추가 (선택사항)", key=f"repost_comment_{post['post_id']}")
-                            col_submit, col_cancel = st.columns(2)
-                            
-                            with col_submit:
-                                if st.button("리포스트", key=f"submit_repost_{post['post_id']}"):
-                                    success, message = post_manager.create_repost(
-                                        current_username, post['post_id'], repost_comment
-                                    )
-                                    if success:
-                                        st.success(message)
-                                        st.session_state[f"show_repost_{post['post_id']}"] = False
-                                        st.rerun()
-                                    else:
-                                        st.error(message)
-                            
-                            with col_cancel:
-                                if st.button("취소", key=f"cancel_repost_{post['post_id']}"):
-                                    st.session_state[f"show_repost_{post['post_id']}"] = False
-                                    st.rerun()
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+                    # 원본 게시물의 이미지 표시
+                    if original_post.get('has_image') and original_post.get('image_path'):
+                        original_image_path = original_post.get('image_path')
+                        if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
+                            st.image(original_image_path, width=400)
+                        else:
+                            st.write("*이미지를 불러올 수 없습니다.*")
+                else:
+                    st.write("*삭제된 게시물입니다.*")
+            else:
+                # 일반 게시물
+                st.write(post['content'])
+                
+                # 이미지 표시
+                if post.get('has_image') and post.get('image_path'):
+                    # image_path가 문자열이고 유효한 경로인지 확인
+                    image_path = post.get('image_path')
+                    if image_path and isinstance(image_path, str) and os.path.exists(image_path):
+                        st.image(image_path, width=400)
+                    else:
+                        st.write("*이미지를 불러올 수 없습니다.*")
         
-        st.markdown("<br>", unsafe_allow_html=True)  # 게시물 간 여백
+        with col3:
+            # 개별 게시물 페이지로 이동 버튼
+            if st.button("📄", key=f"detail_{post['post_id']}", help="게시물 상세보기"):
+                st.session_state.current_page = 'post_detail'
+                st.session_state.selected_post_id = post['post_id']
+                st.rerun()
+        
+        # 액션 버튼들
+        if show_actions:
+            col_like, col_repost, col_stats = st.columns([1, 1, 4])
+            
+            with col_like:
+                # 좋아요 버튼
+                liked = post_manager.user_liked_post(post['post_id'], current_username)
+                like_emoji = "❤️" if liked else "🤍"
+                if st.button(f"{like_emoji} {post['like_count']}", key=f"like_{post['post_id']}"):
+                    post_manager.toggle_like(post['post_id'], current_username)
+                    st.rerun()
+            
+            with col_repost:
+                # 리포스트 버튼
+                if st.button(f"🔄 {post['repost_count']}", key=f"repost_{post['post_id']}"):
+                    st.session_state[f"show_repost_{post['post_id']}"] = True
+                    st.rerun()
+            
+            # 리포스트 폼
+            if st.session_state.get(f"show_repost_{post['post_id']}", False):
+                with st.expander("리포스트하기", expanded=True):
+                    repost_comment = st.text_area("코멘트 추가 (선택사항)", key=f"repost_comment_{post['post_id']}")
+                    col_submit, col_cancel = st.columns(2)
+                    
+                    with col_submit:
+                        if st.button("리포스트", key=f"submit_repost_{post['post_id']}"):
+                            success, message = post_manager.create_repost(
+                                current_username, post['post_id'], repost_comment
+                            )
+                            if success:
+                                st.success(message)
+                                st.session_state[f"show_repost_{post['post_id']}"] = False
+                                st.rerun()
+                            else:
+                                st.error(message)
+                    
+                    with col_cancel:
+                        if st.button("취소", key=f"cancel_repost_{post['post_id']}"):
+                            st.session_state[f"show_repost_{post['post_id']}"] = False
+                            st.rerun()
+        
+        st.write("---")
 
 def post_detail_page(post_manager, current_username):
     """개별 게시물 상세 페이지"""
@@ -352,20 +423,36 @@ def post_detail_page(post_manager, current_username):
                 
                 original_post = post_manager.get_post_by_id(post['original_post_id'])
                 if original_post:
-                    with st.container():
-                        st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
-                        st.write(original_post['content'])
+                    st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+                    st.write(original_post['content'])
+                    
+                    # 원본 게시물의 이미지 표시
+                    if original_post.get('has_image') and original_post.get('image_path'):
+                        original_image_path = original_post.get('image_path')
+                        if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
+                            st.image(original_image_path, width=500)
+                        else:
+                            st.write("*이미지를 불러올 수 없습니다.*")
                 else:
                     st.write("*삭제된 게시물입니다.*")
             else:
                 st.markdown("**내용:**")
                 st.write(post['content'])
+                
+                # 이미지 표시 (상세 페이지에서는 더 크게)
+                if post.get('has_image') and post.get('image_path'):
+                    st.markdown("**첨부 이미지:**")
+                    image_path = post.get('image_path')
+                    if image_path and isinstance(image_path, str) and os.path.exists(image_path):
+                        st.image(image_path, width=600)
+                    else:
+                        st.write("*이미지를 불러올 수 없습니다.*")
     
     st.write("---")
     
     # 상호작용 통계
     st.subheader("통계")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("좋아요", post['like_count'])
@@ -374,6 +461,9 @@ def post_detail_page(post_manager, current_username):
     with col3:
         post_type = "리포스트" if post['is_repost'] else "원본 게시물"
         st.metric("유형", post_type)
+    with col4:
+        has_image_text = "있음" if post.get('has_image') else "없음"
+        st.metric("이미지", has_image_text)
     
     # 좋아요 누른 사용자 목록
     st.subheader("좋아요 누른 사용자")
