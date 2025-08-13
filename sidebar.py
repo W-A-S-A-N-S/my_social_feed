@@ -48,7 +48,10 @@ def profile_page(auth_manager, post_manager, username):
     col1, col2 = st.columns([1, 3])
     
     with col1:
-        st.image("https://via.placeholder.com/150", width=150)
+        # 현재 프로필 이모지 표시
+        current_emoji = auth_manager.get_user_profile_emoji(username)
+        st.markdown(f"<div style='font-size: 120px; text-align: center;'>{current_emoji}</div>", 
+                   unsafe_allow_html=True)
     
     with col2:
         st.subheader(f"@{username}")
@@ -81,6 +84,27 @@ def profile_page(auth_manager, post_manager, username):
     
     # 프로필 편집 섹션
     with st.expander("프로필 편집", expanded=False):
+        # 프로필 이모지 선택
+        st.write("**프로필 이모지 선택:**")
+        
+        # 이모지를 그리드 형태로 표시
+        emoji_cols = st.columns(10)  # 10개씩 한 줄에 표시
+        
+        for i, emoji in enumerate(auth_manager.profile_emojis):
+            col_idx = i % 10
+            with emoji_cols[col_idx]:
+                if st.button(emoji, key=f"emoji_{i}"):
+                    success, message = auth_manager.update_profile_emoji(username, emoji)
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+        
+        st.write("---")
+        
+        # 비밀번호 변경
+        st.write("**비밀번호 변경:**")
         new_password = st.text_input("새 비밀번호", type="password", key="new_password")
         confirm_password = st.text_input("비밀번호 확인", type="password", key="confirm_password")
         
@@ -96,7 +120,7 @@ def profile_page(auth_manager, post_manager, username):
             else:
                 st.error("새 비밀번호를 입력해주세요.")
 
-def my_posts_page(post_manager, username):
+def my_posts_page(post_manager, username, auth_manager=None):
     """내 게시물 페이지"""
     st.title("📝 내 게시물")
     
@@ -126,9 +150,9 @@ def my_posts_page(post_manager, username):
     
     # 게시물 목록 (삭제 기능 포함)
     for _, post in my_posts.iterrows():
-        display_my_post_with_delete(post.to_dict(), post_manager, username)
+        display_my_post_with_delete(post.to_dict(), post_manager, username, auth_manager)
 
-def liked_posts_page(post_manager, username):
+def liked_posts_page(post_manager, username, auth_manager=None):
     """좋아요한 게시물 페이지"""
     st.title("❤️ 좋아요한 게시물")
     
@@ -154,12 +178,15 @@ def liked_posts_page(post_manager, username):
         if post:
             # 좋아요 누른 날짜 표시
             st.caption(f"좋아요 누른 날짜: {liked_date}")
-            display_post(post, post_manager, username, show_actions=True)
+            
+            # display_post 함수를 import해서 사용
+            from post import display_post
+            display_post(post, post_manager, username, show_actions=True, auth_manager=auth_manager)
         else:
             st.write("*삭제된 게시물입니다.*")
             st.write("---")
 
-def display_my_post_with_delete(post, post_manager, username):
+def display_my_post_with_delete(post, post_manager, username, auth_manager=None):
     """내 게시물 표시 (삭제 기능 포함)"""
     # 게시물 컨테이너에 스타일 적용
     st.markdown("""
@@ -177,7 +204,13 @@ def display_my_post_with_delete(post, post_manager, username):
     col1, col2, col3, col4 = st.columns([1, 4, 1, 1])
     
     with col1:
-        st.image("https://via.placeholder.com/50", width=50)
+        # 프로필 이모지 표시
+        if auth_manager:
+            profile_emoji = auth_manager.get_user_profile_emoji(post['username'])
+            st.markdown(f"<div style='font-size: 50px; text-align: center;'>{profile_emoji}</div>", 
+                       unsafe_allow_html=True)
+        else:
+            st.image("https://via.placeholder.com/50", width=50)
     
     with col2:
         st.markdown(f"**{post['username']}** · {post['created_at']}")
@@ -248,7 +281,14 @@ def display_my_post_with_delete(post, post_manager, username):
                 background-color: #2a2a2a;
             ">
             """, unsafe_allow_html=True)
-            st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+            
+            # 원본 게시물 작성자 프로필 이모지
+            if auth_manager:
+                orig_profile_emoji = auth_manager.get_user_profile_emoji(original_post['username'])
+                st.markdown(f"{orig_profile_emoji} **{original_post['username']}** · {original_post['created_at']}")
+            else:
+                st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+            
             st.write(original_post['content'])
             
             # 원본 게시물의 이미지 표시

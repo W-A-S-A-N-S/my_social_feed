@@ -6,17 +6,35 @@ class AuthManager:
     def __init__(self, csv_file='users.csv'):
         self.csv_file = csv_file
         self.df = self.load_users()
+        
+        # 사용 가능한 프로필 이모지 목록
+        self.profile_emojis = [
+            "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
+            "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙",
+            "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔",
+            "🤐", "🤨", "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥",
+            "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧",
+            "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "😎", "🤓", "🧐", "😕",
+            "😟", "🙁", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "😨",
+            "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩",
+            "😫", "🥱", "😤", "😡", "😠", "🤬", "😈", "👿", "💀", "💩",
+            "🤡", "👹", "👺", "👻", "👽", "👾", "🤖", "🎃", "😺", "😸",
+            "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🐶", "🐱", "🐭",
+            "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷"
+        ]
     
     def load_users(self):
         """CSV 파일에서 사용자 데이터 로드"""
         try:
-            return pd.read_csv(self.csv_file)
+            df = pd.read_csv(self.csv_file)
+            
+            # 기존 데이터에 프로필 이모지 컬럼이 없으면 추가
+            if 'profile_emoji' not in df.columns:
+                df['profile_emoji'] = "😀"  # 기본 이모지
+                
+            return df
         except FileNotFoundError:
-            return pd.DataFrame(columns=['id', 'username', 'password', 'created_at'])
-    
-    def save_users(self):
-        """사용자 데이터를 CSV 파일에 저장"""
-        self.df.to_csv(self.csv_file, index=False)
+            return pd.DataFrame(columns=['id', 'username', 'password', 'created_at', 'profile_emoji'])
     
     def save_users(self):
         """사용자 데이터를 CSV 파일에 저장"""
@@ -45,7 +63,8 @@ class AuthManager:
             'id': self.get_next_id(),
             'username': username,
             'password': password,
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'profile_emoji': "😀"  # 기본 프로필 이모지
         }
         
         self.df = pd.concat([self.df, pd.DataFrame([new_user])], ignore_index=True)
@@ -68,6 +87,30 @@ class AuthManager:
             return True, f"환영합니다, {username}님!"
         else:
             return False, "비밀번호가 틀렸습니다"
+    
+    def update_profile_emoji(self, username, emoji):
+        """사용자 프로필 이모지 업데이트"""
+        if emoji not in self.profile_emojis:
+            return False, "유효하지 않은 이모지입니다."
+        
+        # 사용자 찾기
+        user_idx = self.df[self.df['username'] == username].index
+        if len(user_idx) == 0:
+            return False, "사용자를 찾을 수 없습니다."
+        
+        # 프로필 이모지 업데이트
+        self.df.loc[user_idx[0], 'profile_emoji'] = emoji
+        self.save_users()
+        
+        return True, "프로필 이모지가 변경되었습니다!"
+    
+    def get_user_profile_emoji(self, username):
+        """사용자 프로필 이모지 조회"""
+        user = self.df[self.df['username'] == username]
+        if len(user) > 0:
+            emoji = user['profile_emoji'].iloc[0]
+            return emoji if emoji and emoji in self.profile_emojis else "😀"
+        return "😀"
 
 def signup_form(auth_manager):
     """회원가입 폼"""

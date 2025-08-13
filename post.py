@@ -29,9 +29,10 @@ class PostManager:
             if 'image_path' not in df.columns:
                 df['image_path'] = None
             
-            # 데이터 타입 정리 (NaN을 None으로 변환) - 경고 해결
+            # 데이터 타입 정리 - 경고 없는 방법 사용
             df['image_path'] = df['image_path'].where(df['image_path'].notna(), None)
-            df['has_image'] = df['has_image'].fillna(False).infer_objects(copy=False)
+            # fillna 대신 직접 None 값을 False로 변경
+            df.loc[df['has_image'].isna(), 'has_image'] = False
                 
             return df
         except FileNotFoundError:
@@ -39,7 +40,7 @@ class PostManager:
                 'post_id', 'username', 'content', 'created_at', 
                 'is_repost', 'original_post_id', 'like_count', 'repost_count',
                 'has_image', 'image_path'
-            ], dtype=object)
+            ])
     
     def load_likes(self):
         """좋아요 데이터 로드"""
@@ -276,7 +277,7 @@ def create_post_form(post_manager, username):
             else:
                 st.error(message)
 
-def display_post(post, post_manager, current_username, show_actions=True):
+def display_post(post, post_manager, current_username, show_actions=True, auth_manager=None):
     """개별 게시물 표시"""
     with st.container():
         # 게시물 정보
@@ -548,7 +549,7 @@ def post_detail_page(post_manager, current_username):
                 st.session_state.show_detail_delete = False
                 st.rerun()
 
-def display_posts_feed(post_manager, current_username):
+def display_posts_feed(post_manager, current_username, auth_manager=None):
     """게시물 피드 표시"""
     st.subheader("최신 게시물")
     
@@ -559,4 +560,4 @@ def display_posts_feed(post_manager, current_username):
         return
     
     for _, post in posts.iterrows():
-        display_post(post.to_dict(), post_manager, current_username)
+        display_post(post.to_dict(), post_manager, current_username, show_actions=True, auth_manager=auth_manager)

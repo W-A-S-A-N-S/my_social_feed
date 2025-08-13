@@ -25,15 +25,15 @@ def main_page():
     # 사이드바 네비게이션
     current_page = sidebar_navigation()
     
-    # 페이지 라우팅
+    # 페이지 라우팅 (auth_manager 전달)
     if current_page == 'home':
         home_page()
     elif current_page == 'profile':
         profile_page(auth_manager, post_manager, st.session_state.username)
     elif current_page == 'my_posts':
-        my_posts_page(post_manager, st.session_state.username)
+        my_posts_page(post_manager, st.session_state.username, auth_manager)
     elif current_page == 'liked_posts':
-        liked_posts_page(post_manager, st.session_state.username)
+        liked_posts_page(post_manager, st.session_state.username, auth_manager)
     elif current_page == 'post_detail':
         post_detail_page(post_manager, st.session_state.username)
 
@@ -48,8 +48,8 @@ def home_page():
     # 게시물 작성 폼
     create_post_form(post_manager, st.session_state.username)
     
-    # 게시물 피드 표시
-    display_posts_feed(post_manager, st.session_state.username)
+    # 게시물 피드 표시 (auth_manager 전달)
+    display_posts_feed(post_manager, st.session_state.username, auth_manager)
 
 # 메인 라우팅
 if st.session_state.logged_in:
