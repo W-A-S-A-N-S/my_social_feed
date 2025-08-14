@@ -285,7 +285,7 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
         
         with col1:
             # 프로필 이모지 표시 (auth_manager가 있을 때)
-            display_profile_emoji(auth_manager, current_username, size=50)
+            display_profile_emoji(auth_manager, post['username'], size=50)  # ✅ 게시물 작성자
         
         with col2:
             st.markdown(f"**{post['username']}** · {post['created_at']}")
@@ -408,7 +408,7 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         
         with col1:
             #프로필 이모지 표시
-            display_profile_emoji(auth_manager, current_username, size=50)
+            display_profile_emoji(auth_manager, post['username'], size=50)  # ✅ 게시물 작성자
         
         with col2:
             st.markdown(f"### {post['username']}")
