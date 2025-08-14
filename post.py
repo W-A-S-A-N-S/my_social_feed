@@ -5,7 +5,7 @@ import json
 import os
 from PIL import Image
 import io
-from auth import AuthManager # 👈 AuthManager import 추가
+from auth import AuthManager
 
 class PostManager:
     def __init__(self, posts_file='posts.csv', likes_file='likes.csv', images_dir='post_images'):
@@ -267,8 +267,30 @@ def display_profile_emoji(auth_manager, username, size=50):
 
 def create_post_form(post_manager, username):
     """게시물 작성 폼"""
+    
+    # 게임 리뷰 템플릿
+    REVIEW_TEMPLATE = """
+---
+### ⭐ 총평
+- 별점: 
+- 한줄평:
+
+### [[ 게임 특징 ]]
+- 가격: 
+- 그래픽: 
+- 사운드: 
+- 게임성: 
+- 한글화: 
+
+---
+"""
     with st.expander("새 게시물 작성", expanded=False):
-        post_content = st.text_area("무슨 일이 일어나고 있나요?", height=100, key="new_post_content")
+        post_content = st.text_area(
+            "무슨 일이 일어나고 있나요?", 
+            height=600, 
+            key="new_post_content", 
+            value=REVIEW_TEMPLATE
+        )
         
         # 이미지 업로드
         uploaded_image = st.file_uploader(
@@ -367,24 +389,22 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
             # 리포스트 폼
             if st.session_state.get(f"show_repost_{post['post_id']}", False):
                 with st.expander("리포스트하기", expanded=True):
-                    repost_comment = st.text_area("코멘트 추가 (선택사항)", key=f"repost_comment_{post['post_id']}")
+                    repost_comment = st.text_area("코멘트 추가 (선택사항)", key="detail_repost_comment")
                     col_submit, col_cancel = st.columns(2)
                     
                     with col_submit:
-                        if st.button("리포스트", key=f"submit_repost_{post['post_id']}"):
-                            success, message = post_manager.create_repost(
-                                current_username, post['post_id'], repost_comment
-                            )
+                        if st.button("리포스트하기", key="detail_submit_repost"):
+                            success, message = post_manager.create_repost(current_username, post['post_id'], repost_comment)
                             if success:
                                 st.success(message)
-                                st.session_state[f"show_repost_{post['post_id']}"] = False
+                                st.session_state.show_detail_repost = False
                                 st.rerun()
                             else:
                                 st.error(message)
                     
                     with col_cancel:
-                        if st.button("취소", key=f"cancel_repost_{post['post_id']}"):
-                            st.session_state[f"show_repost_{post['post_id']}"] = False
+                        if st.button("취소", key="detail_cancel_repost"):
+                            st.session_state.show_detail_repost = False
                             st.rerun()
         
         st.write("---")

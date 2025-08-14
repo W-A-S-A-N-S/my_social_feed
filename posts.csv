@@ -10,3 +10,16 @@ post_id,username,content,created_at,is_repost,original_post_id,like_count,repost
 12,dog,qqq,2025-08-13 15:27:30,False,,0,0,False,
 13,dog,qqq,2025-08-13 15:27:34,False,,1,0,False,
 14,dog,1,2025-08-13 15:29:37,False,,2,0,False,
+15,dog,"---
+### ⭐ 총평
+- 별점: 
+- 한줄평:
+
+### [[ 게임 특징 ]]
+- 가격: 
+- 그래픽: 
+- 사운드: 
+- 게임성: 
+- 한글화: 
+
+---",2025-08-14 11:25:35,False,,0,0,False,
