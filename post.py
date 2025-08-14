@@ -6,6 +6,7 @@ import os
 from PIL import Image
 import io
 from auth import AuthManager
+import matplotlib.pyplot as plt
 
 class PostManager:
     def __init__(self, posts_file='posts.csv', likes_file='likes.csv', images_dir='post_images'):
@@ -268,50 +269,63 @@ def display_profile_emoji(auth_manager, username, size=50):
 def create_post_form(post_manager, username):
     """게시물 작성 폼"""
     
-    # 게임 리뷰 템플릿
-    REVIEW_TEMPLATE = """
----
-### ⭐ 총평
-- 별점: 
-- 한줄평:
-
-### [[ 게임 특징 ]]
-- 가격: 
-- 그래픽: 
-- 사운드: 
-- 게임성: 
-- 한글화: 
-
----
-"""
     with st.expander("새 게시물 작성", expanded=False):
-        post_content = st.text_area(
-            "무슨 일이 일어나고 있나요?", 
-            height=400, 
-            key="new_post_content", 
-            value=REVIEW_TEMPLATE
-        )
-        
-        # 이미지 업로드
-        uploaded_image = st.file_uploader(
-            "이미지 업로드 (선택사항)", 
-            type=['jpg', 'jpeg', 'png', 'gif', 'webp'],
-            key="post_image_upload"
-        )
-        
-        # 업로드된 이미지 미리보기
-        if uploaded_image is not None:
-            st.write("**이미지 미리보기:**")
-            image = Image.open(uploaded_image)
-            st.image(image, width=300)
-        
-        if st.button("게시하기", key="create_post_btn"):
-            success, message = post_manager.create_post(username, post_content, uploaded_image)
-            if success:
-                st.success(message)
-                st.rerun()
-            else:
-                st.error(message)
+        post_type = st.radio("게시물 유형을 선택하세요:", ("일반 게시물", "데이터 비교 게시물"))
+
+        if post_type == "일반 게시물":
+            st.subheader("새 게시물 작성")
+            post_content = st.text_area("무슨 일이 일어나고 있나요?", height=200, key="new_post_content")
+            
+            # 이미지 업로드
+            uploaded_image = st.file_uploader(
+                "이미지 업로드 (선택사항)", 
+                type=['jpg', 'jpeg', 'png', 'gif', 'webp'],
+                key="post_image_upload"
+            )
+            
+            # 업로드된 이미지 미리보기
+            if uploaded_image is not None:
+                st.write("**이미지 미리보기:**")
+                image = Image.open(uploaded_image)
+                st.image(image, width=300)
+            
+            if st.button("게시하기", key="create_post_btn"):
+                success, message = post_manager.create_post(username, post_content, uploaded_image)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+
+        elif post_type == "데이터 비교 게시물":
+            st.subheader("데이터 비교 게시물 작성")
+            
+            title = st.text_input("게시물 제목을 입력하세요:")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                before_value = st.number_input("이전 값:", value=0)
+            with col2:
+                after_value = st.number_input("이후 값:", value=0)
+            
+            if st.button("도표 게시하기", key="create_data_post_btn"):
+                if title:
+                    data_payload = {
+                        "type": "chart",
+                        "title": title,
+                        "data": {
+                            "before": before_value,
+                            "after": after_value
+                        }
+                    }
+                    success, message = post_manager.create_post(username, json.dumps(data_payload))
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    st.error("제목을 입력해주세요.")
 
 def display_post(post, post_manager, current_username, show_actions=True, auth_manager=None):
     """개별 게시물 표시"""
@@ -326,54 +340,67 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
         with col2:
             st.markdown(f"**{post['username']}** · {post['created_at']}")
             
-            # 리포스트인 경우
-            if post['is_repost'] and post['original_post_id']:
-                if post['content']:  # 코멘트가 있는 경우
-                    st.write(post['content'])
-                    st.markdown("---")
-                
-                # 원본 게시물 표시
-                original_post = post_manager.get_post_by_id(post['original_post_id'])
-                if original_post:
-                    st.markdown("🔄 **리포스트된 게시물:**")
-                    st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
-                    st.write(original_post['content'])
+            # 게시물 내용 표시
+            is_data_post = False
+            if isinstance(post['content'], str):
+                try:
+                    content_data = json.loads(post['content'])
+                    if content_data and isinstance(content_data, dict) and content_data.get('type') == 'chart':
+                        is_data_post = True
+                        st.markdown(f"### {content_data.get('title', '데이터 비교')}")
+                        
+                        data = content_data.get('data', {})
+                        labels = list(data.keys())
+                        values = list(data.values())
+    
+                        fig, ax = plt.subplots()
+                        ax.bar(labels, values)
+                        ax.set_title(content_data.get('title'))
+                        st.pyplot(fig)
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            
+            if not is_data_post:
+                if post.get('is_repost') and post.get('original_post_id'):
+                    if post.get('content'):
+                        st.write(post['content'])
+                        st.markdown("---")
                     
-                    # 원본 게시물의 이미지 표시
-                    if original_post.get('has_image') and original_post.get('image_path'):
-                        original_image_path = original_post.get('image_path')
-                        if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
-                            st.image(original_image_path, width=400)
-                        else:
-                            st.write("*이미지를 불러올 수 없습니다.*")
-                else:
-                    st.write("*삭제된 게시물입니다.*")
-            else:
-                # 일반 게시물
-                st.write(post['content'])
-                
-                # 이미지 표시
-                if post.get('has_image') and post.get('image_path'):
-                    # image_path가 문자열이고 유효한 경로인지 확인
-                    image_path = post.get('image_path')
-                    if image_path and isinstance(image_path, str) and os.path.exists(image_path):
-                        st.image(image_path, width=400)
+                    original_post = post_manager.get_post_by_id(post['original_post_id'])
+                    if original_post:
+                        st.markdown("🔄 **리포스트된 게시물:**")
+                        st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+                        st.write(original_post['content'])
+                        
+                        if original_post.get('has_image') and original_post.get('image_path'):
+                            original_image_path = original_post.get('image_path')
+                            if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
+                                st.image(original_image_path, width=400)
+                            else:
+                                st.write("*이미지를 불러올 수 없습니다.*")
                     else:
-                        st.write("*이미지를 불러올 수 없습니다.*")
-        
+                        st.write("*삭제된 게시물입니다.*")
+                else:
+                    if post.get('content') is not None:
+                        st.write(post['content'])
+
+            if post.get('has_image') and post.get('image_path'):
+                image_path = post.get('image_path')
+                if image_path and isinstance(image_path, str) and os.path.exists(image_path):
+                    st.image(image_path, width=400)
+                else:
+                    st.write("*이미지를 불러올 수 없습니다.*")
+
         with col3:
-            # 개별 게시물 페이지로 이동 버튼
             if st.button("📄", key=f"detail_{post['post_id']}", help="게시물 상세보기"):
                 st.session_state.current_page = 'post_detail'
                 st.session_state.selected_post_id = post['post_id']
                 st.rerun()
         
-        # 액션 버튼들
         if show_actions:
             col_like, col_repost, col_stats = st.columns([1, 1, 4])
             
             with col_like:
-                # 좋아요 버튼
                 liked = post_manager.user_liked_post(post['post_id'], current_username)
                 like_emoji = "❤️" if liked else "🤍"
                 if st.button(f"{like_emoji} {post['like_count']}", key=f"like_{post['post_id']}"):
@@ -381,12 +408,10 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
                     st.rerun()
             
             with col_repost:
-                # 리포스트 버튼
                 if st.button(f"🔄 {post['repost_count']}", key=f"repost_{post['post_id']}"):
                     st.session_state[f"show_repost_{post['post_id']}"] = True
                     st.rerun()
             
-            # 리포스트 폼
             if st.session_state.get(f"show_repost_{post['post_id']}", False):
                 with st.expander("리포스트하기", expanded=True):
                     repost_comment = st.text_area("코멘트 추가 (선택사항)", key="detail_repost_comment")
@@ -413,14 +438,12 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
     """개별 게시물 상세 페이지"""
     st.title("📄 게시물 상세")
     
-    # 뒤로가기 버튼
     if st.button("← 뒤로가기"):
         st.session_state.current_page = 'home'
         if 'selected_post_id' in st.session_state:
             del st.session_state['selected_post_id']
         st.rerun()
     
-    # 선택된 게시물 조회
     post_id = st.session_state.get('selected_post_id')
     if not post_id:
         st.error("게시물을 찾을 수 없습니다.")
@@ -433,61 +456,75 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
     
     st.write("---")
     
-    # 게시물 상세 정보 표시
     st.subheader("게시물 정보")
     
-    # 큰 게시물 카드
     with st.container():
         col1, col2 = st.columns([1, 4])
         
         with col1:
-            #프로필 이모지 표시
             display_profile_emoji(auth_manager, post['username'], size=50)
         
         with col2:
             st.markdown(f"### {post['username']}")
             st.markdown(f"**작성일:** {post['created_at']}")
             
-            # 리포스트인 경우
-            if post['is_repost'] and post['original_post_id']:
-                st.markdown("🔄 **리포스트**")
-                if post['content']:
-                    st.markdown("**코멘트:**")
-                    st.write(post['content'])
-                
-                st.markdown("---")
-                st.markdown("**원본 게시물:**")
-                
-                original_post = post_manager.get_post_by_id(post['original_post_id'])
-                if original_post:
-                    st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
-                    st.write(original_post['content'])
+            is_data_post = False
+            if isinstance(post.get('content'), str):
+                try:
+                    content_data = json.loads(post['content'])
+                    if content_data and isinstance(content_data, dict) and content_data.get('type') == 'chart':
+                        is_data_post = True
+                        st.markdown(f"### {content_data.get('title', '데이터 비교')}")
+                        
+                        data = content_data.get('data', {})
+                        labels = list(data.keys())
+                        values = list(data.values())
+
+                        fig, ax = plt.subplots()
+                        ax.bar(labels, values)
+                        ax.set_title(content_data.get('title'))
+                        st.pyplot(fig)
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+
+            if not is_data_post:
+                if post.get('is_repost') and post.get('original_post_id'):
+                    st.markdown("🔄 **리포스트**")
+                    if post.get('content'):
+                        st.markdown("**코멘트:**")
+                        st.write(post['content'])
                     
-                    # 원본 게시물의 이미지 표시
-                    if original_post.get('has_image') and original_post.get('image_path'):
-                        original_image_path = original_post.get('image_path')
-                        if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
-                            st.image(original_image_path, width=500)
-                        else:
-                            st.write("*이미지를 불러올 수 없습니다.*")
-                else:
-                    st.write("*삭제된 게시물입니다.*")
-            else:
-                st.markdown("**내용:**")
-                st.write(post['content'])
-                
-                # 이미지 표시 (상세 페이지에서는 더 크게)
-                if post.get('has_image') and post.get('image_path'):
-                    st.markdown("**첨부 이미지:**")
-                    image_path = post.get('image_path')
-                    if image_path and isinstance(image_path, str) and os.path.exists(image_path):
-                        st.image(image_path, width=600)
+                    st.markdown("---")
+                    st.markdown("**원본 게시물:**")
+                    
+                    original_post = post_manager.get_post_by_id(post['original_post_id'])
+                    if original_post:
+                        st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
+                        st.write(original_post['content'])
+                        
+                        if original_post.get('has_image') and original_post.get('image_path'):
+                            original_image_path = original_post.get('image_path')
+                            if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
+                                st.image(original_image_path, width=500)
+                            else:
+                                st.write("*이미지를 불러올 수 없습니다.*")
                     else:
-                        st.write("*이미지를 불러올 수 없습니다.*")
+                        st.write("*삭제된 게시물입니다.*")
+                else:
+                    if post.get('content') is not None:
+                        st.markdown("**내용:**")
+                        st.write(post['content'])
+            
+            if post.get('has_image') and post.get('image_path'):
+                st.markdown("**첨부 이미지:**")
+                image_path = post.get('image_path')
+                if image_path and isinstance(image_path, str) and os.path.exists(image_path):
+                    st.image(image_path, width=600)
+                else:
+                    st.write("*이미지를 불러올 수 없습니다.*")
     
     st.write("---")
     
-    # 상호작용 통계
     st.subheader("통계")
     col1, col2, col3, col4 = st.columns(4)
     
@@ -502,7 +539,6 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         has_image_text = "있음" if post.get('has_image') else "없음"
         st.metric("이미지", has_image_text)
     
-    # 좋아요 누른 사용자 목록
     st.subheader("좋아요 누른 사용자")
     likes = post_manager.get_post_likes(post_id)
     
@@ -510,7 +546,6 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         for _, like in likes.iterrows():
             col1, col2 = st.columns([1, 4])
             with col1:
-                # 좋아요 누른 사람 프로필 이모지 표시
                 display_profile_emoji(auth_manager, like['username'], size=40)
             with col2:
                 st.write(f"**{like['username']}** · {like['created_at']}")
@@ -519,7 +554,6 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
     
     st.write("---")
     
-    # 액션 버튼들 (큰 버튼)
     st.subheader("액션")
     col1, col2, col3 = st.columns(3)
     
@@ -541,7 +575,6 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
                 st.session_state.show_detail_delete = True
                 st.rerun()
     
-    # 리포스트 폼
     if st.session_state.get('show_detail_repost', False):
         st.subheader("리포스트하기")
         repost_comment = st.text_area("코멘트 추가 (선택사항)", key="detail_repost_comment")
@@ -562,7 +595,6 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
                 st.session_state.show_detail_repost = False
                 st.rerun()
     
-    # 삭제 확인
     if st.session_state.get('show_detail_delete', False):
         st.error("⚠️ 이 게시물을 정말 삭제하시겠습니까?")
         st.write("삭제된 게시물은 복구할 수 없습니다.")
