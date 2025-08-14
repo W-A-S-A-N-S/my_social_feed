@@ -287,7 +287,7 @@ def create_post_form(post_manager, username):
     with st.expander("새 게시물 작성", expanded=False):
         post_content = st.text_area(
             "무슨 일이 일어나고 있나요?", 
-            height=600, 
+            height=400, 
             key="new_post_content", 
             value=REVIEW_TEMPLATE
         )
