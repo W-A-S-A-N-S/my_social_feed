@@ -285,15 +285,7 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
         
         with col1:
             # 프로필 이모지 표시 (auth_manager가 있을 때)
-            if auth_manager:
-                try:
-                    profile_emoji = auth_manager.get_user_profile_emoji(post['username'])
-                    st.markdown(f"<div style='font-size: 50px; text-align: center;'>{profile_emoji}</div>", 
-                               unsafe_allow_html=True)
-                except Exception as e:
-                    st.image("https://via.placeholder.com/50", width=50)
-            else:
-                st.image("https://via.placeholder.com/50", width=50)
+            display_profile_emoji(auth_manager, current_username, size=50)
         
         with col2:
             st.markdown(f"**{post['username']}** · {post['created_at']}")
@@ -416,12 +408,7 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         
         with col1:
             #프로필 이모지 표시
-            if auth_manager:
-                profile_emoji = auth_manager.get_user_profile_emoji(post['username'])
-                st.markdown(f"<div style='font-size: 50px; text-align: center;'>{profile_emoji}</div>", 
-                           unsafe_allow_html=True)
-            else:
-                st.image("https://via.placeholder.com/50", width=50)
+            display_profile_emoji(auth_manager, current_username, size=50)
         
         with col2:
             st.markdown(f"### {post['username']}")
@@ -576,3 +563,16 @@ def display_posts_feed(post_manager, current_username, auth_manager=None):
     
     for _, post in posts.iterrows():
         display_post(post.to_dict(), post_manager, current_username, show_actions=True, auth_manager=auth_manager)
+
+
+
+def display_profile_emoji(auth_manager, username, size=50):
+    """프로필 이모지를 표시하는 공통 함수"""
+    if auth_manager:
+        emoji = auth_manager.get_user_profile_emoji(username)
+        st.markdown(
+            f"<div style='font-size: {size}px; text-align: center;'>{emoji}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.image("https://via.placeholder.com/50", width=size)
