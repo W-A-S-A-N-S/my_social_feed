@@ -111,6 +111,20 @@ class AuthManager:
             emoji = user['profile_emoji'].iloc[0]
             return emoji if emoji and emoji in self.profile_emojis else "😀"
         return "😀"
+    
+    def get_user_id(self, username): # 👈 추가
+        """사용자명으로 ID 조회"""
+        user = self.df[self.df['username'] == username]
+        if len(user) > 0:
+            return user['id'].iloc[0]
+        return None
+
+    def get_username_by_id(self, user_id): # 👈 추가
+        """ID로 사용자명 조회"""
+        user = self.df[self.df['id'] == user_id]
+        if len(user) > 0:
+            return user['username'].iloc[0]
+        return None
 
 def signup_form(auth_manager):
     """회원가입 폼"""

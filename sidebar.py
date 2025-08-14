@@ -14,7 +14,8 @@ def sidebar_navigation():
         "🏠 홈": "home",
         "👤 프로필": "profile", 
         "📝 내 게시물": "my_posts",
-        "❤️ 좋아요한 게시물": "liked_posts"
+        "❤️ 좋아요한 게시물": "liked_posts",
+        "🔍 모든 사용자": "all_users" # 👈 추가
     }
     
     current_page = st.session_state.get('current_page', 'home')
@@ -40,10 +41,20 @@ def sidebar_navigation():
     
     return current_page
 
-def profile_page(auth_manager, post_manager, username):
-    """프로필 페이지"""
-    st.title("👤 프로필")
+def profile_page(auth_manager, post_manager, follow_manager, username):
+    """
+    프로필 페이지 (다른 사용자의 프로필도 볼 수 있도록 수정)
+    """
+    is_my_profile = (username == st.session_state.username)
     
+    if is_my_profile:
+        st.title("👤 내 프로필")
+    else:
+        st.title(f"👤 {username}님의 프로필")
+    
+    user_info = auth_manager.df[auth_manager.df['username'] == username]
+    user_id = user_info['id'].iloc[0] if len(user_info) > 0 else None
+
     # 사용자 정보
     col1, col2 = st.columns([1, 3])
     
@@ -56,69 +67,96 @@ def profile_page(auth_manager, post_manager, username):
     with col2:
         st.subheader(f"@{username}")
         
-        # 통계 정보
-        user_posts = post_manager.posts_df[post_manager.posts_df['username'] == username]
-        total_posts = len(user_posts)
-        total_likes_received = user_posts['like_count'].sum()
-        total_reposts_received = user_posts['repost_count'].sum()
-        
-        # 사용자가 받은 좋아요 수
-        user_likes_given = len(post_manager.likes_df[post_manager.likes_df['username'] == username])
-        
         # 가입일 정보
         user_info = auth_manager.df[auth_manager.df['username'] == username]
         if len(user_info) > 0:
             joined_date = user_info['created_at'].iloc[0]
             st.write(f"📅 가입일: {joined_date}")
-        
-        # 통계 표시
-        col_stat1, col_stat2, col_stat3 = st.columns(3)
-        with col_stat1:
-            st.metric("게시물", total_posts)
-        with col_stat2:
-            st.metric("받은 좋아요", total_likes_received)
-        with col_stat3:
-            st.metric("받은 리포스트", total_reposts_received)
-    
-    st.write("---")
-    
-    # 프로필 편집 섹션
-    with st.expander("프로필 편집", expanded=False):
-        # 프로필 이모지 선택
-        st.write("**프로필 이모지 선택:**")
-        
-        # 이모지를 그리드 형태로 표시
-        emoji_cols = st.columns(10)  # 10개씩 한 줄에 표시
-        
-        for i, emoji in enumerate(auth_manager.profile_emojis):
-            col_idx = i % 10
-            with emoji_cols[col_idx]:
-                if st.button(emoji, key=f"emoji_{i}"):
-                    success, message = auth_manager.update_profile_emoji(username, emoji)
+            
+    if not is_my_profile and user_id: # 👈 다른 사용자 프로필일 때 팔로우 버튼 표시
+        current_user_id = auth_manager.get_user_id(st.session_state.username)
+        if current_user_id:
+            if follow_manager.is_following(current_user_id, user_id):
+                if st.button("언팔로우", key=f"unfollow_{user_id}", use_container_width=True):
+                    success, message = follow_manager.unfollow_user(current_user_id, user_id)
                     if success:
                         st.success(message)
                         st.rerun()
                     else:
                         st.error(message)
-        
-        st.write("---")
-        
-        # 비밀번호 변경
-        st.write("**비밀번호 변경:**")
-        new_password = st.text_input("새 비밀번호", type="password", key="new_password")
-        confirm_password = st.text_input("비밀번호 확인", type="password", key="confirm_password")
-        
-        if st.button("비밀번호 변경"):
-            if new_password and confirm_password:
-                if new_password == confirm_password:
-                    # 비밀번호 업데이트
-                    auth_manager.df.loc[auth_manager.df['username'] == username, 'password'] = new_password
-                    auth_manager.save_users()
-                    st.success("비밀번호가 변경되었습니다!")
-                else:
-                    st.error("비밀번호가 일치하지 않습니다.")
             else:
-                st.error("새 비밀번호를 입력해주세요.")
+                if st.button("팔로우", key=f"follow_{user_id}", type="primary", use_container_width=True):
+                    success, message = follow_manager.follow_user(current_user_id, user_id)
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+                        
+    st.write("---")
+
+    # 통계 정보
+    user_posts = post_manager.posts_df[post_manager.posts_df['username'] == username]
+    total_posts = len(user_posts)
+    total_likes_received = user_posts['like_count'].sum()
+    total_reposts_received = user_posts['repost_count'].sum()
+
+    # 팔로워/팔로잉 수 추가 👈
+    follower_count = follow_manager.get_follower_count(user_id) if user_id else 0
+    following_count = follow_manager.get_following_count(user_id) if user_id else 0
+    
+    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5) # 👈 컬럼 5개로 변경
+    with col_stat1:
+        st.metric("게시물", total_posts)
+    with col_stat2:
+        st.metric("받은 좋아요", total_likes_received)
+    with col_stat3:
+        st.metric("받은 리포스트", total_reposts_received)
+    with col_stat4:
+        st.metric("팔로워", follower_count) # 👈 추가
+    with col_stat5:
+        st.metric("팔로잉", following_count) # 👈 추가
+
+    st.write("---")
+
+    if is_my_profile:     
+        # 프로필 편집 섹션
+        with st.expander("프로필 편집", expanded=False):
+            # 프로필 이모지 선택
+            st.write("**프로필 이모지 선택:**")
+            
+            # 이모지를 그리드 형태로 표시
+            emoji_cols = st.columns(10)  # 10개씩 한 줄에 표시
+            
+            for i, emoji in enumerate(auth_manager.profile_emojis):
+                col_idx = i % 10
+                with emoji_cols[col_idx]:
+                    if st.button(emoji, key=f"emoji_{i}"):
+                        success, message = auth_manager.update_profile_emoji(username, emoji)
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+            
+            st.write("---")
+            
+            # 비밀번호 변경
+            st.write("**비밀번호 변경:**")
+            new_password = st.text_input("새 비밀번호", type="password", key="new_password")
+            confirm_password = st.text_input("비밀번호 확인", type="password", key="confirm_password")
+            
+            if st.button("비밀번호 변경"):
+                if new_password and confirm_password:
+                    if new_password == confirm_password:
+                        # 비밀번호 업데이트
+                        auth_manager.df.loc[auth_manager.df['username'] == username, 'password'] = new_password
+                        auth_manager.save_users()
+                        st.success("비밀번호가 변경되었습니다!")
+                    else:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                else:
+                    st.error("새 비밀번호를 입력해주세요.")
 
 def my_posts_page(post_manager, username, auth_manager=None):
     """내 게시물 페이지"""
@@ -332,21 +370,53 @@ def display_my_post_with_delete(post, post_manager, username, auth_manager=None)
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)  # 게시물 간 여백
 
-def get_user_stats(post_manager, auth_manager, username):
-    """사용자 통계 정보 조회"""
-    user_posts = post_manager.posts_df[post_manager.posts_df['username'] == username]
-    user_likes = post_manager.likes_df[post_manager.likes_df['username'] == username]
+def all_users_page(auth_manager, post_manager, follow_manager):
+    """모든 사용자를 보여주는 페이지"""
+    st.title("🔍 모든 사용자")
     
-    # 가입일
-    user_info = auth_manager.df[auth_manager.df['username'] == username]
-    joined_date = user_info['created_at'].iloc[0] if len(user_info) > 0 else "알 수 없음"
+    current_user_id = auth_manager.get_user_id(st.session_state.username)
+    all_users = auth_manager.df[auth_manager.df['id'] != current_user_id]
     
-    stats = {
-        'total_posts': len(user_posts),
-        'total_likes_received': user_posts['like_count'].sum(),
-        'total_reposts_received': user_posts['repost_count'].sum(),
-        'total_likes_given': len(user_likes),
-        'joined_date': joined_date
-    }
-    
-    return stats
+    if len(all_users) == 0:
+        st.write("아직 다른 사용자가 없습니다.")
+        return
+        
+    for _, user in all_users.iterrows():
+        col1, col2, col3, col4 = st.columns([1, 4, 1, 1])
+        
+        with col1:
+            st.markdown(f"<div style='font-size: 50px; text-align: center;'>{user['profile_emoji']}</div>", 
+                       unsafe_allow_html=True)
+                       
+        with col2:
+            st.subheader(f"@{user['username']}")
+            # 통계 정보
+            follower_count = follow_manager.get_follower_count(user['id'])
+            st.caption(f"팔로워: {follower_count}")
+        
+        with col3:
+            # 프로필 보기 버튼
+            if st.button("프로필 보기", key=f"view_profile_{user['id']}"):
+                st.session_state.current_page = 'view_profile'
+                st.session_state.target_user_id = user['id']
+                st.rerun()
+
+        with col4:
+            # 팔로우/언팔로우 버튼
+            if follow_manager.is_following(current_user_id, user['id']):
+                if st.button("언팔로우", key=f"unfollow_list_{user['id']}"):
+                    success, message = follow_manager.unfollow_user(current_user_id, user['id'])
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+            else:
+                if st.button("팔로우", key=f"follow_list_{user['id']}", type="primary"):
+                    success, message = follow_manager.follow_user(current_user_id, user['id'])
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+    st.write("---")

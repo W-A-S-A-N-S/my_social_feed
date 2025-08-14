@@ -5,6 +5,7 @@ import json
 import os
 from PIL import Image
 import io
+from auth import AuthManager # 👈 AuthManager import 추가
 
 class PostManager:
     def __init__(self, posts_file='posts.csv', likes_file='likes.csv', images_dir='post_images'):
@@ -251,6 +252,19 @@ class PostManager:
         """게시물의 좋아요 목록 조회"""
         return self.likes_df[self.likes_df['post_id'] == post_id].sort_values('created_at', ascending=False)
 
+
+def display_profile_emoji(auth_manager, username, size=50):
+    """프로필 이모지를 표시하는 공통 함수"""
+    if auth_manager:
+        emoji = auth_manager.get_user_profile_emoji(username)
+        st.markdown(
+            f"<div style='font-size: {size}px; text-align: center;'>{emoji}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.image("https://via.placeholder.com/50", width=size)
+
+
 def create_post_form(post_manager, username):
     """게시물 작성 폼"""
     with st.expander("새 게시물 작성", expanded=False):
@@ -285,7 +299,7 @@ def display_post(post, post_manager, current_username, show_actions=True, auth_m
         
         with col1:
             # 프로필 이모지 표시 (auth_manager가 있을 때)
-            display_profile_emoji(auth_manager, post['username'], size=50)  # ✅ 게시물 작성자
+            display_profile_emoji(auth_manager, post['username'], size=50)
         
         with col2:
             st.markdown(f"**{post['username']}** · {post['created_at']}")
@@ -408,7 +422,7 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         
         with col1:
             #프로필 이모지 표시
-            display_profile_emoji(auth_manager, post['username'], size=50)  # ✅ 게시물 작성자
+            display_profile_emoji(auth_manager, post['username'], size=50)
         
         with col2:
             st.markdown(f"### {post['username']}")
@@ -476,7 +490,8 @@ def post_detail_page(post_manager, current_username, auth_manager=None):
         for _, like in likes.iterrows():
             col1, col2 = st.columns([1, 4])
             with col1:
-                st.image("https://via.placeholder.com/40", width=40)
+                # 좋아요 누른 사람 프로필 이모지 표시
+                display_profile_emoji(auth_manager, like['username'], size=40)
             with col2:
                 st.write(f"**{like['username']}** · {like['created_at']}")
     else:
@@ -563,7 +578,6 @@ def display_posts_feed(post_manager, current_username, auth_manager=None):
     
     for _, post in posts.iterrows():
         display_post(post.to_dict(), post_manager, current_username, show_actions=True, auth_manager=auth_manager)
-
 
 
 def display_profile_emoji(auth_manager, username, size=50):
