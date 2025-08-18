@@ -1,5 +1,6 @@
 # my_social_feed
 # 🏭 My Social Feed - 팩토리 모니터링 통합 소셜 플랫폼
+# https://mysocial.streamlit.app/
 
 ## 📖 프로젝트 개요
 
@@ -66,7 +67,7 @@ streamlit run app.py
 ```
 
 ### 3. 웹 브라우저에서 접속
-- 로컬: `http://localhost:8501`
+- 로컬
 - 자동으로 브라우저가 열립니다
 
 ## 🎮 사용법
