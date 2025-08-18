@@ -1,0 +1,2 @@
+factory_id,factory_name,location,created_at,last_temp,last_pressure,last_rpm,last_product_count,last_status,last_update
+factory_001,공장 1,서울,2025-08-18 09:21:07,184.9742341055802,153.6360728958341,51.77385927640872,103.25142005637224,normal,2025-08-18 09:31:28

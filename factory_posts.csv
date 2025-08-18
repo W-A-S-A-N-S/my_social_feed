@@ -1,0 +1,5 @@
+post_id,factory_id,factory_name,message,status_data,priority,created_at
+1,factory_001,공장 1,🏭 새로운 팩토리 '공장 1'가 서울에 설립되었습니다!,,normal,2025-08-18 09:21:07
+2,factory_001,공장 1,"✅ 공장 1 정상 운영 중 (온도: 182.1°C, 압력: 145.4bar)","{""timestamp"": ""2025-08-18 09:25:36.333650"", ""factory_name"": ""\uacf5\uc7a5 1"", ""temperature"": 182.11, ""pressure"": 145.38, ""rpm"": 49.51, ""product_count"": 95.65, ""status"": ""normal""}",normal,2025-08-18 09:25:36
+3,factory_001,공장 1,⚙️ 공장 1 속도 문제 발생! 현재 RPM: 26.6,"{""timestamp"": ""2025-08-18 09:26:46.082786"", ""factory_name"": ""\uacf5\uc7a5 1"", ""temperature"": 182.11, ""pressure"": 145.38, ""rpm"": 26.61, ""product_count"": 95.65, ""status"": ""rpm_issue""}",high,2025-08-18 09:26:46
+4,factory_001,공장 1,"✅ 공장 1 정상 운영 중 (온도: 185.0°C, 압력: 153.6bar)","{""timestamp"": ""2025-08-18 09:31:28.606194"", ""factory_name"": ""\uacf5\uc7a5 1"", ""temperature"": 184.97, ""pressure"": 153.64, ""rpm"": 51.77, ""product_count"": 103.25, ""status"": ""normal""}",normal,2025-08-18 09:31:28

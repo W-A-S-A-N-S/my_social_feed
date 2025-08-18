@@ -1,3 +1,4 @@
+# sidebar.py (수정된 버전)
 import streamlit as st
 from post import display_post
 from datetime import datetime
@@ -15,15 +16,27 @@ def sidebar_navigation():
         "👤 프로필": "profile", 
         "📝 내 게시물": "my_posts",
         "❤️ 좋아요한 게시물": "liked_posts",
-        "🔍 모든 사용자": "all_users" # 👈 추가
+        "🔍 모든 사용자": "all_users",
+        "🏭 팩토리 대시보드": "factory_dashboard"  # 추가
     }
     
     current_page = st.session_state.get('current_page', 'home')
     
     for label, page_key in menu_options.items():
-        if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+        # 팩토리 관련 메뉴는 특별히 강조
+        if page_key == 'factory_dashboard':
+            button_type = "primary" if current_page == page_key else "secondary"
+        else:
+            button_type = "secondary"
+            
+        if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}", type=button_type):
             st.session_state.current_page = page_key
             st.rerun()
+    
+    st.sidebar.write("---")
+    
+    # 팩토리 빠른 상태 (사이드바)
+    display_factory_quick_status()
     
     st.sidebar.write("---")
     
@@ -40,6 +53,48 @@ def sidebar_navigation():
         st.rerun()
     
     return current_page
+
+def display_factory_quick_status():
+    """사이드바에 팩토리 빠른 상태 표시"""
+    try:
+        # factory_manager가 있는지 확인
+        if 'factory_manager' in globals() or hasattr(st.session_state, 'factory_manager'):
+            from factory_manager import FactoryManager
+            factory_manager = FactoryManager()
+            
+            summary = factory_manager.get_factory_summary()
+            
+            if summary['total_factories'] > 0:
+                st.sidebar.subheader("🏭 팩토리 현황")
+                
+                # 상태별 개수 표시
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    st.sidebar.metric("정상", summary['normal_count'])
+                    st.sidebar.metric("경고", summary['warning_count'])
+                with col2:
+                    st.sidebar.metric("위험", summary['error_count'])
+                
+                # 위험 상황 알림
+                if summary['error_count'] > 0:
+                    st.sidebar.error(f"🚨 {summary['error_count']}개 팩토리 위험!")
+                elif summary['warning_count'] > 0:
+                    st.sidebar.warning(f"⚠️ {summary['warning_count']}개 팩토리 주의")
+                else:
+                    st.sidebar.success("✅ 모든 팩토리 정상")
+                
+                # 빠른 액션 버튼
+                if st.sidebar.button("🔄 상태 업데이트", key="sidebar_update"):
+                    for factory_id in factory_manager.factories.keys():
+                        factory_manager.update_factory_status(factory_id)
+                    st.sidebar.success("업데이트 완료!")
+                    st.rerun()
+            
+            else:
+                st.sidebar.info("등록된 팩토리가 없습니다.")
+                
+    except Exception as e:
+        st.sidebar.write("팩토리 상태 로딩 중...")
 
 def profile_page(auth_manager, post_manager, follow_manager, username):
     """
@@ -73,7 +128,7 @@ def profile_page(auth_manager, post_manager, follow_manager, username):
             joined_date = user_info['created_at'].iloc[0]
             st.write(f"📅 가입일: {joined_date}")
             
-    if not is_my_profile and user_id: # 👈 다른 사용자 프로필일 때 팔로우 버튼 표시
+    if not is_my_profile and user_id: 
         current_user_id = auth_manager.get_user_id(st.session_state.username)
         if current_user_id:
             if follow_manager.is_following(current_user_id, user_id):
@@ -101,11 +156,11 @@ def profile_page(auth_manager, post_manager, follow_manager, username):
     total_likes_received = user_posts['like_count'].sum()
     total_reposts_received = user_posts['repost_count'].sum()
 
-    # 팔로워/팔로잉 수 추가 👈
+    # 팔로워/팔로잉 수 추가
     follower_count = follow_manager.get_follower_count(user_id) if user_id else 0
     following_count = follow_manager.get_following_count(user_id) if user_id else 0
     
-    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5) # 👈 컬럼 5개로 변경
+    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
     with col_stat1:
         st.metric("게시물", total_posts)
     with col_stat2:
@@ -113,9 +168,9 @@ def profile_page(auth_manager, post_manager, follow_manager, username):
     with col_stat3:
         st.metric("받은 리포스트", total_reposts_received)
     with col_stat4:
-        st.metric("팔로워", follower_count) # 👈 추가
+        st.metric("팔로워", follower_count)
     with col_stat5:
-        st.metric("팔로잉", following_count) # 👈 추가
+        st.metric("팔로잉", following_count)
 
     st.write("---")
 
@@ -217,9 +272,8 @@ def liked_posts_page(post_manager, username, auth_manager=None):
             # 좋아요 누른 날짜 표시
             st.caption(f"좋아요 누른 날짜: {liked_date}")
             
-            # display_post 함수를 import해서 사용
-            from post import display_post
-            display_post(post, post_manager, username, show_actions=True, auth_manager=auth_manager)
+            from enhanced_post_display import display_enhanced_post
+            display_enhanced_post(post, post_manager, username, show_actions=True, auth_manager=auth_manager)
         else:
             st.write("*삭제된 게시물입니다.*")
             st.write("---")
@@ -299,61 +353,11 @@ def display_my_post_with_delete(post, post_manager, username, auth_manager=None)
         
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # 게시물 내용 표시
-    # 리포스트인 경우
-    if post['is_repost'] and post['original_post_id']:
-        if post['content']:  # 코멘트가 있는 경우
-            st.write(post['content'])
-            st.markdown("---")
-        
-        # 원본 게시물 표시 (중첩된 박스 스타일)
-        original_post = post_manager.get_post_by_id(post['original_post_id'])
-        if original_post:
-            st.markdown("🔄 **리포스트된 게시물:**")
-            st.markdown("""
-            <div style="
-                border: 1px solid #555;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 10px 0;
-                background-color: #2a2a2a;
-            ">
-            """, unsafe_allow_html=True)
-            
-            # 원본 게시물 작성자 프로필 이모지
-            if auth_manager:
-                orig_profile_emoji = auth_manager.get_user_profile_emoji(original_post['username'])
-                st.markdown(f"{orig_profile_emoji} **{original_post['username']}** · {original_post['created_at']}")
-            else:
-                st.markdown(f"**{original_post['username']}** · {original_post['created_at']}")
-            
-            st.write(original_post['content'])
-            
-            # 원본 게시물의 이미지 표시
-            if original_post.get('has_image') and original_post.get('image_path'):
-                original_image_path = original_post.get('image_path')
-                if original_image_path and isinstance(original_image_path, str) and os.path.exists(original_image_path):
-                    st.image(original_image_path, width=400)
-                else:
-                    st.write("*이미지를 불러올 수 없습니다.*")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.write("*삭제된 게시물입니다.*")
-    else:
-        # 일반 게시물
+    # 게시물 내용 표시 (간단히)
+    if post.get('content'):
         st.write(post['content'])
-        
-        # 이미지 표시
-        if post.get('has_image') and post.get('image_path'):
-            image_path = post.get('image_path')
-            if image_path and isinstance(image_path, str) and os.path.exists(image_path):
-                st.image(image_path, width=400)
-            else:
-                st.write("*이미지를 불러올 수 없습니다.*")
     
-    # 통계 정보 (액션 버튼 없이)
-    st.markdown("<br>", unsafe_allow_html=True)  # 여백 추가
+    # 통계 정보
     col_stats1, col_stats2, col_stats3 = st.columns(3)
     with col_stats1:
         st.write(f"❤️ {post['like_count']} 좋아요")
@@ -366,9 +370,9 @@ def display_my_post_with_delete(post, post_manager, username, auth_manager=None)
         else:
             st.write("📝 원본 게시물")
     
-    # 게시물 박스 닫기 (맨 마지막에!)
+    # 게시물 박스 닫기
     st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)  # 게시물 간 여백
+    st.markdown("<br>", unsafe_allow_html=True)
 
 def all_users_page(auth_manager, post_manager, follow_manager):
     """모든 사용자를 보여주는 페이지"""
